@@ -49,6 +49,7 @@ $ docker run -it --rm -v /USER_DIRECTORY:/home/rstudio/analysis  lootpiz/geomx-w
 ## TO-DOs
   - [ ] Users can access and modify the parameter files
   - [ ] Create an HTML report template to load diagnostic plots
+  - [ ] Map Worksheet and metadata and generate an Excel file
   - [ ] Embed analysis modules
 
 ---
