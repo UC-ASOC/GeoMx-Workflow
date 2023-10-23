@@ -3,7 +3,7 @@ GeoMx-Workflow
 > An app to run Nanostring GeoMx DSP (Digital Spatial Profiler) Workflows
 
 ## About
-This is a Docker app built to compile a set of packages to run GeoMx Workflows [vignettes](https://www.bioconductor.org/packages/release/workflows/vignettes/GeoMxWorkflows/inst/doc/GeomxTools_RNA-NGS_Analysis.html) which enables comprehensive QC/analysis of the GeoMx data. This app was built on [bioconductor_docker](https://hub.docker.com/r/bioconductor/bioconductor_docker) and the sessionInfo can be found at the bottom of the page.
+This is a Docker app built to compile a set of packages to run GeoMx Workflows [vignettes](https://www.bioconductor.org/packages/release/workflows/vignettes/GeoMxWorkflows/inst/doc/GeomxTools_RNA-NGS_Analysis.html) which enables comprehensive QC/analysis of the GeoMx data. This app was built on [bioconductor_docker](https://hub.docker.com/r/bioconductor/bioconductor_docker) and the _sessionInfo_ can be found at the bottom of the page.
 
 ## Features
   * **Run GeoMx Workflows handy using Docker**
