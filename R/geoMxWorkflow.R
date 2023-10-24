@@ -610,24 +610,25 @@ write.table(pasteListValues(sapply(segmentNames, length), FALSE), file.path(outD
 message("\n\t++ Created:")
 message("\t  - Results/09_Stats.txt")
 
-stats <- pData(noFilterSet)
-df <- data.frame(
-        Slide = stats$Slide,
-        Sample = stats$Sample,
-        Segment = stats$Segment,
-        Area = stats$area,
-        Nuclei = stats$nuclei,
-        LOQ = stats$LOQ,
-        GenesDetected = stats$GenesDetected,
-        GenesDetRate = stats$GeneDetectionRate,
-        Filter = 0
-)
-colnames(df)[6] <- "LOQ"
-df$Filter[which(rownames(df) %in% colnames(finalSet))] <- 1
-df$Slide <- factor(df$Slide, levels=slideOrder)
-df$Segment <- factor(df$Segment, levels=segmentOrder)
+filteredOut <- setdiff(rownames(pData(noFilterSet)), rownames(pData(finalSet)))
+if (!identical(filteredOut, character(0))) {
+        stats <- pData(noFilterSet)
+        df <- data.frame(
+                Slide = stats$Slide,
+                Sample = stats$Sample,
+                Segment = stats$Segment,
+                Area = stats$area,
+                Nuclei = stats$nuclei,
+                LOQ = stats$LOQ,
+                GenesDetected = stats$GenesDetected,
+                GenesDetRate = stats$GeneDetectionRate,
+                Filter = 0
+        )
+        colnames(df)[6] <- "LOQ"
+        df$Filter[which(rownames(df) %in% colnames(finalSet))] <- 1
+        df$Slide <- factor(df$Slide, levels=slideOrder)
+        df$Segment <- factor(df$Segment, levels=segmentOrder)
 
-if (length(unique(df$Filter)) > 1) {
         for (segment in segmentOrder) {
                 subDf <- df[which(df$Segment == segment),]
                 table <- xtabs( ~ Filter + Slide, data = subDf)
@@ -645,74 +646,74 @@ if (length(unique(df$Filter)) > 1) {
                 suppressWarnings(write.table(table, file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=T, col.names=T, quote=F, sep="\t", append=T))
                 message(paste0("\t  - Results/09_Stats_", segment, ".txt"))
         }
-}
 
-dummies <- sapply(seq_along(segmentNames), function(idx) {        
-        prefix <- names(segmentNames)[idx]
-        selectSegments <- segmentNames[[idx]]
+        dummies <- sapply(seq_along(segmentNames), function(idx) {        
+                prefix <- names(segmentNames)[idx]
+                selectSegments <- segmentNames[[idx]]
 
-        if (length(selectSegments) > 0) {
-                subDf <- df[which(rownames(df) %in% selectSegments),]
-                subDf <- data.frame(subDf, MedianExpression = noFilterExpr[selectSegments])
-                
-                b1 <- boxQC(subDf, "Segment", "Area", "Slide", "log10", cols = segmentCols)
-                b2 <- boxQC(subDf, "Segment", "Nuclei", "Slide", "log10", cols = segmentCols)
-                b3 <- boxQC(subDf, "Segment", "LOQ", "Slide", "log10", cols = segmentCols)
-                b4 <- boxQC(subDf, "Segment", "MedianExpression", "Slide", "log10", cols = segmentCols, yLabel = "Median expression")
-                
-                pdf(file.path(outDir, paste0("09_Boxplot_", prefix, ".pdf")))
-                print(b1)
-                print(b2)
-                print(b3)
-                print(b4)
-                invisible(dev.off())
-                message(paste0("\t  - Results/09_Boxplot_", prefix, ".pdf"))
+                if (length(selectSegments) > 0) {
+                        subDf <- df[which(rownames(df) %in% selectSegments),]
+                        subDf <- data.frame(subDf, MedianExpression = noFilterExpr[selectSegments])
+                        
+                        b1 <- boxQC(subDf, "Segment", "Area", "Slide", "log10", cols = segmentCols)
+                        b2 <- boxQC(subDf, "Segment", "Nuclei", "Slide", "log10", cols = segmentCols)
+                        b3 <- boxQC(subDf, "Segment", "LOQ", "Slide", "log10", cols = segmentCols)
+                        b4 <- boxQC(subDf, "Segment", "MedianExpression", "Slide", "log10", cols = segmentCols, yLabel = "Median expression")
+                        
+                        pdf(file.path(outDir, paste0("09_Boxplot_", prefix, ".pdf")))
+                        print(b1)
+                        print(b2)
+                        print(b3)
+                        print(b4)
+                        invisible(dev.off())
+                        message(paste0("\t  - Results/09_Boxplot_", prefix, ".pdf"))
 
-                pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
-                for (segment in segmentOrder) {
-                        suppressWarnings({
-                                segDf <- subDf[which(df$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
-                                pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
-                        })
+                        pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
+                        for (segment in segmentOrder) {
+                                suppressWarnings({
+                                        segDf <- subDf[which(df$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
+                                        pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
+                                })
+                        }
+                        invisible(dev.off())
+                        message(paste0("\t  - Results/09_Scatterplot_", segment, ".pdf"))
                 }
-                invisible(dev.off())
-                message(paste0("\t  - Results/09_Scatterplot_", segment, ".pdf"))
-        }
 
-        return(idx) # dummy
-})
-
-prefix <- "FilterIn_UQ3"
-selectSegments <- segmentNames[[2]]
-
-subDf <- df[which(rownames(df) %in% selectSegments),]
-subDf <- data.frame(subDf, MedianExpression = finalSetExpr)
-
-b1 <- boxQC(subDf, "Segment", "Area", "Slide", "log10", cols = segmentCols)
-b2 <- boxQC(subDf, "Segment", "Nuclei", "Slide", "log10", cols = segmentCols)
-b3 <- boxQC(subDf, "Segment", "LOQ", "Slide", "log10", cols = segmentCols)
-b4 <- boxQC(subDf, "Segment", "MedianExpression", "Slide", "log10", cols = segmentCols, yLabel = "Median expression")
-
-pdf(file.path(outDir, paste0("09_Boxplot_", prefix, ".pdf")))
-print(b1)
-print(b2)
-print(b3)
-print(b4)
-invisible(dev.off())
-message(paste0("\t  - Results/09_Boxplot_", prefix, ".pdf"))
-
-pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
-for (segment in segmentOrder) {
-        suppressWarnings({
-                segDf <- subDf[which(df$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
-                pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
+                return(idx) # dummy
         })
+
+        prefix <- "FilterIn_UQ3"
+        selectSegments <- segmentNames[[2]]
+
+        subDf <- df[which(rownames(df) %in% selectSegments),]
+        subDf <- data.frame(subDf, MedianExpression = finalSetExpr)
+
+        b1 <- boxQC(subDf, "Segment", "Area", "Slide", "log10", cols = segmentCols)
+        b2 <- boxQC(subDf, "Segment", "Nuclei", "Slide", "log10", cols = segmentCols)
+        b3 <- boxQC(subDf, "Segment", "LOQ", "Slide", "log10", cols = segmentCols)
+        b4 <- boxQC(subDf, "Segment", "MedianExpression", "Slide", "log10", cols = segmentCols, yLabel = "Median expression")
+
+        pdf(file.path(outDir, paste0("09_Boxplot_", prefix, ".pdf")))
+        print(b1)
+        print(b2)
+        print(b3)
+        print(b4)
+        invisible(dev.off())
+        message(paste0("\t  - Results/09_Boxplot_", prefix, ".pdf"))
+
+        pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
+        for (segment in segmentOrder) {
+                suppressWarnings({
+                        segDf <- subDf[which(df$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
+                        pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
+                })
+        }
+        invisible(dev.off())
+        message(paste0("\t  - Results/09_Scatterplot_", prefix, ".pdf"))
 }
-invisible(dev.off())
-message(paste0("\t  - Results/09_Scatterplot_", prefix, ".pdf"))
 
 saveRDS(as.data.frame(pData(newSet)), file.path(outDir, "10_finalStats.RDS"))
-message("\t  - Results/10_finalStats.RDS")
+message("\t  - Results/00_finalStats.RDS")
 
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
 message("Fin")
