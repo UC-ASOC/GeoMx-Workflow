@@ -5,12 +5,18 @@
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # Settings
 setwd("/home/rstudio/R")
-
-source("parameterSettings.R")
 source("userDefinedFunctions.R")
 
+baseDir <- "/home/rstudio/analysis/"
 outDir <- file.path(baseDir, "Results")
 dir.create(outDir, showWarnings = FALSE)
+
+paramFile <- file.path(baseDir, "Settings", "parameterSettings.R")
+if (file.exists(paramFile)) { 
+	source(paramFile)
+} else {
+	stop("Provide parameterSettings.R file with -v option")
+}
 
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # Load libraries
@@ -77,7 +83,8 @@ message("\t  - Results/01_RAW_count.txt")
 
 # Study design in a glance
 countDf <- pData(gSet) %>% make_long(Region, Segment, Patient)
-studyDesign <- ggplot(countDf, aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
+suppressWarnings({
+        studyDesign <- ggplot(countDf, aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
                 geom_sankey(flow.alpha = .6, node.color = "gray30") +
                 geom_sankey_label(size = 3, color = "black", fill = "white") +
                 scale_fill_viridis_d(option = "A", alpha = 0.95) +
@@ -101,9 +108,10 @@ studyDesign <- ggplot(countDf, aes(x = x, next_x = next_x, node = node, next_nod
                         legend.position = "none", 
                         text = element_text(size = 12)
                 )
+})
 
 pdf(file.path(outDir, "01_Study_design.pdf"))
-print(studyDesign)
+suppressWarnings(print(studyDesign))
 invisible(dev.off())
 message("\t  - Results/01_Study_design.txt")
 
@@ -522,7 +530,8 @@ message(paste0("\t  - Genes  : ", dim(finalSet)[1]))
 message(paste0("\t  - Samples: ", dim(finalSet)[2]))
 
 countDf <- pData(gSet) %>% make_long(Region, Segment, Patient)
-studyDesign <- ggplot(countDf, aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
+suppressWarnings({
+        studyDesign <- ggplot(countDf, aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
                 geom_sankey(flow.alpha = .6, node.color = "gray30") +
                 geom_sankey_label(size = 3, color = "black", fill = "white") +
                 scale_fill_viridis_d(option = "A", alpha = 0.95) +
@@ -546,9 +555,10 @@ studyDesign <- ggplot(countDf, aes(x = x, next_x = next_x, node = node, next_nod
                         legend.position = "none", 
                         text = element_text(size = 12)
                 )
+})
 
 pdf(file.path(outDir, "07_Study_design.pdf"))
-print(studyDesign)
+suppressWarnings(print(studyDesign))
 invisible(dev.off())
 message("\n\t++ Created:")
 message("\t  - Results/07_Gene_detection_rate.txt")
@@ -617,54 +627,57 @@ df$Filter[which(rownames(df) %in% colnames(finalSet))] <- 1
 df$Slide <- factor(df$Slide, levels=slideOrder)
 df$Segment <- factor(df$Segment, levels=segmentOrder)
 
-# xtabs( ~ Filter + Slide + Segment, data = df)
-for (segment in segmentOrder) {
-        subDf <- df[which(df$Segment == segment),]
-        table <- xtabs( ~ Filter + Slide, data = subDf)
-        fisherP <- fisher.test(table)$p.value
-        catt <- CochranArmitageTest(table, alternative = c("two.sided"))$p.value
-        rowSum <- apply(table, 1, sum)
-        table <- cbind(table, rowSum)
-        colSum <- apply(table, 2, sum)
-        table <- rbind(table, colSum)
-        colnames(table)[1] <- paste0("Filter\t", colnames(table)[1])
-        colnames(table)[ncol(table)] <- "TOTAL"
-        rownames(table) <- c("Out", "In", "TOTAL")
+if (length(unique(df$Filter)) > 1) {
+        for (segment in segmentOrder) {
+                subDf <- df[which(df$Segment == segment),]
+                table <- xtabs( ~ Filter + Slide, data = subDf)
+                fisherP <- fisher.test(table)$p.value
+                catt <- CochranArmitageTest(table, alternative = c("two.sided"))$p.value
+                rowSum <- apply(table, 1, sum)
+                table <- cbind(table, rowSum)
+                colSum <- apply(table, 2, sum)
+                table <- rbind(table, colSum)
+                colnames(table)[1] <- paste0("Filter\t", colnames(table)[1])
+                colnames(table)[ncol(table)] <- "TOTAL"
+                rownames(table) <- c("Out", "In", "TOTAL")
 
-        write.table(paste0("# Fisher Exact Test, p-value = ", fisherP, "\n# Cochran-Armitage Trend Test, p-value = ", catt), file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=F, col.names=F, quote=F, sep="\t")
-        suppressWarnings(write.table(table, file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=T, col.names=T, quote=F, sep="\t", append=T))
-        message(paste0("\t  - Results/09_Stats_", segment, ".txt"))
+                write.table(paste0("# Fisher Exact Test, p-value = ", fisherP, "\n# Cochran-Armitage Trend Test, p-value = ", catt), file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=F, col.names=F, quote=F, sep="\t")
+                suppressWarnings(write.table(table, file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=T, col.names=T, quote=F, sep="\t", append=T))
+                message(paste0("\t  - Results/09_Stats_", segment, ".txt"))
+        }
 }
 
-dummies <- sapply(seq_along(segmentNames), function(idx) {
+dummies <- sapply(seq_along(segmentNames), function(idx) {        
         prefix <- names(segmentNames)[idx]
         selectSegments <- segmentNames[[idx]]
 
-        subDf <- df[which(rownames(df) %in% selectSegments),]
-        subDf <- data.frame(subDf, MedianExpression = noFilterExpr[selectSegments])
-        
-        b1 <- boxQC(subDf, "Segment", "Area", "Slide", "log10", cols = segmentCols)
-        b2 <- boxQC(subDf, "Segment", "Nuclei", "Slide", "log10", cols = segmentCols)
-        b3 <- boxQC(subDf, "Segment", "LOQ", "Slide", "log10", cols = segmentCols)
-        b4 <- boxQC(subDf, "Segment", "MedianExpression", "Slide", "log10", cols = segmentCols, yLabel = "Median expression")
-        
-        pdf(file.path(outDir, paste0("09_Boxplot_", prefix, ".pdf")))
-        print(b1)
-        print(b2)
-        print(b3)
-        print(b4)
-        invisible(dev.off())
-        message(paste0("\t  - Results/09_Boxplot_", prefix, ".pdf"))
+        if (length(selectSegments) > 0) {
+                subDf <- df[which(rownames(df) %in% selectSegments),]
+                subDf <- data.frame(subDf, MedianExpression = noFilterExpr[selectSegments])
+                
+                b1 <- boxQC(subDf, "Segment", "Area", "Slide", "log10", cols = segmentCols)
+                b2 <- boxQC(subDf, "Segment", "Nuclei", "Slide", "log10", cols = segmentCols)
+                b3 <- boxQC(subDf, "Segment", "LOQ", "Slide", "log10", cols = segmentCols)
+                b4 <- boxQC(subDf, "Segment", "MedianExpression", "Slide", "log10", cols = segmentCols, yLabel = "Median expression")
+                
+                pdf(file.path(outDir, paste0("09_Boxplot_", prefix, ".pdf")))
+                print(b1)
+                print(b2)
+                print(b3)
+                print(b4)
+                invisible(dev.off())
+                message(paste0("\t  - Results/09_Boxplot_", prefix, ".pdf"))
 
-        pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
-        for (segment in segmentOrder) {
-                suppressWarnings({
-                        segDf <- subDf[which(df$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
-                        pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
-                })
+                pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
+                for (segment in segmentOrder) {
+                        suppressWarnings({
+                                segDf <- subDf[which(df$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
+                                pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
+                        })
+                }
+                invisible(dev.off())
+                message(paste0("\t  - Results/09_Scatterplot_", segment, ".pdf"))
         }
-        invisible(dev.off())
-        message(paste0("\t  - Results/09_Scatterplot_", segment, ".pdf"))
 
         return(idx) # dummy
 })
@@ -698,7 +711,7 @@ for (segment in segmentOrder) {
 invisible(dev.off())
 message(paste0("\t  - Results/09_Scatterplot_", prefix, ".pdf"))
 
-saveRDS(as.matrix(pData(newSet)), file.path(outDir, "10_finalStats.RDS"))
+saveRDS(as.data.frame(pData(newSet)), file.path(outDir, "10_finalStats.RDS"))
 message("\t  - Results/10_finalStats.RDS")
 
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
