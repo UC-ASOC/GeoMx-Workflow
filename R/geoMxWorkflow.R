@@ -283,6 +283,7 @@ message(paste0("\t  - Genes  : ", dim(newSet)[1]))
 message(paste0("\t  - Samples: ", dim(newSet)[2]))
 
 saveRDS(newSet, file.path(outDir, "06_geomxSet.RDS"))
+saveRDS(as.data.frame(pData(newSet)), file.path(outDir, "00_finalStats.RDS"))
 
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # -- * -- Step 7 -- * --
@@ -632,8 +633,10 @@ if (!identical(filteredOut, character(0))) {
         for (segment in segmentOrder) {
                 subDf <- df[which(df$Segment == segment),]
                 table <- xtabs( ~ Filter + Slide, data = subDf)
-                fisherP <- fisher.test(table)$p.value
-                catt <- CochranArmitageTest(table, alternative = c("two.sided"))$p.value
+                fisherObj <- try(fisher.test(table), silent=TRUE)
+                if(is(fisherObj, "try-error")) { fisherP <- NA } else { fisherP <- formatC(fisherObj$p.value, format="e", digits=2) }
+                cattObj <- CochranArmitageTest(table, alternative = c("two.sided"))
+                if(is(cattObj, "try-error")) { cattP <- NA } else { cattP <- formatC(cattObj$p.value, format="e", digits=2) }
                 rowSum <- apply(table, 1, sum)
                 table <- cbind(table, rowSum)
                 colSum <- apply(table, 2, sum)
@@ -642,7 +645,7 @@ if (!identical(filteredOut, character(0))) {
                 colnames(table)[ncol(table)] <- "TOTAL"
                 rownames(table) <- c("Out", "In", "TOTAL")
 
-                write.table(paste0("# Fisher Exact Test, p-value = ", fisherP, "\n# Cochran-Armitage Trend Test, p-value = ", catt), file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=F, col.names=F, quote=F, sep="\t")
+                write.table(paste0("# Fisher Exact Test, p-value = ", fisherP, "\n# Cochran-Armitage Trend Test, p-value = ", cattP), file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=F, col.names=F, quote=F, sep="\t")
                 suppressWarnings(write.table(table, file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=T, col.names=T, quote=F, sep="\t", append=T))
                 message(paste0("\t  - Results/09_Stats_", segment, ".txt"))
         }
@@ -711,9 +714,6 @@ if (!identical(filteredOut, character(0))) {
         invisible(dev.off())
         message(paste0("\t  - Results/09_Scatterplot_", prefix, ".pdf"))
 }
-
-saveRDS(as.data.frame(pData(newSet)), file.path(outDir, "10_finalStats.RDS"))
-message("\t  - Results/00_finalStats.RDS")
 
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
 message("Fin")
