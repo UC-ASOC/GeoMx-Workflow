@@ -17,13 +17,14 @@ This is a Docker app built to compile a set of packages to run GeoMx Workflows [
   * The following NanoString Probe Kit Configuration (PKC) file was downloaded from [Nanostring](https://nanostring.com/products/geomx-digital-spatial-profiler/geomx-dsp-configuration-files/)
 
 #### Prerequisite
-  * To run the Workflow, **three** folders under the ```/USER_DIRECTORY``` folder are required and the folder names are case-sensitive.
-    1. **DCC**   : All Digital Count Conversion files
-    1. **PKC**   : Probe kit configuration file
-    1. **Annot**: [Worksheet (and sample annotation) in Excel](./example/Annotation.xlsx)
+  * To run the Workflow, **three** folders under the ```/USER_DIRECTORY``` folder and **one** param file are required and the folder names are case-sensitive.
+    1. **DCC** : All Digital Count Conversion files
+    2. **PKC** : Probe Kit Configuration file
+    3. **Annot** : [Worksheet (and sample annotation) in Excel](./example/Annotation.xlsx)
+    4. **param.R** : [Parameters to run geomx-workflow](./example/param.R)
   
 ```
-Brain (USER_DIRECTORY)
+USER_DIRECTORY
 ├── Annot
 │   └── Annotation.xlsx
 ├── DCC
@@ -40,14 +41,13 @@ Brain (USER_DIRECTORY)
 
 #### Docker
 ```
-$ docker run -it --rm -v /USER_DIRECTORY:/home/rstudio/analysis  lootpiz/geomx-workflow
+$ docker run -it --rm -v /USER_DIRECTORY:/home/rstudio/analysis -v /param.R:/home/rstudio/analysis/Settings/parameterSettings.R lootpiz/geomx-workflow
 ```
 
 #### Results
   * Users can find the results, i.e., PDF, TXT, and RDS files, in the ```/USER_DIRECTORY/Results``` folder.
 
 ## TO-DOs
-  - [ ] Users can access and modify the parameter files
   - [ ] Create an HTML report template to load diagnostic plots
   - [ ] Map Worksheet and metadata and generate an Excel file
   - [ ] Embed analysis modules
