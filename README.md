@@ -21,7 +21,7 @@ This is a Docker app built to compile a set of packages to run GeoMx Workflows [
     1. **DCC** : All Digital Count Conversion files
     2. **PKC** : Probe Kit Configuration file
     3. **Annot** : [Worksheet (and sample annotation) in Excel](./example/Annotation.xlsx)
-    4. **param.R** : [Parameters to run geomx-workflow](./example/param.R)
+    4. **parameterSettings.R** : [Parameters to run geomx-workflow](./example/parameterSettings.R)
   
 ```
 USER_DIRECTORY
@@ -41,7 +41,7 @@ USER_DIRECTORY
 
 #### Docker
 ```
-$ docker run -it --rm -v /USER_DIRECTORY:/home/rstudio/analysis -v /param.R:/home/rstudio/analysis/Settings/parameterSettings.R lootpiz/geomx-workflow
+$ docker run -it --rm -v /USER_DIRECTORY:/home/rstudio/analysis -v /parameterSettings.R:/home/rstudio/analysis/Settings/parameterSettings.R lootpiz/geomx-workflow
 ```
 
 #### Results
