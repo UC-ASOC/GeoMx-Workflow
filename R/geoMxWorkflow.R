@@ -274,6 +274,10 @@ message(paste0("\t  - Samples: ", dim(gSet)[2]))
 # -- * -- Step 6 -- * --
 # (1) Aggregate multi-probe and generate a gene expression profile
 newSet <- aggregateCounts(gSet)
+
+#Exclude negative control from the gene list
+newSet <- subset(newSet, fData(newSet)$TargetName != "NegProbe-WTX")
+
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
 message("Preprocessing 06: Generate a gene-level count matrix where the count for")
 message("                 any gene with multiple probes per segment is calculated as")
@@ -635,7 +639,7 @@ if (!identical(filteredOut, character(0))) {
                 table <- xtabs( ~ Filter + Slide, data = subDf)
                 fisherObj <- try(fisher.test(table), silent=TRUE)
                 if(is(fisherObj, "try-error")) { fisherP <- NA } else { fisherP <- formatC(fisherObj$p.value, format="e", digits=2) }
-                cattObj <- CochranArmitageTest(table, alternative = c("two.sided"))
+                cattObj <- try(CochranArmitageTest(table, alternative = c("two.sided")), silent=TRUE)
                 if(is(cattObj, "try-error")) { cattP <- NA } else { cattP <- formatC(cattObj$p.value, format="e", digits=2) }
                 rowSum <- apply(table, 1, sum)
                 table <- cbind(table, rowSum)
@@ -674,8 +678,10 @@ if (!identical(filteredOut, character(0))) {
                         pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
                         for (segment in segmentOrder) {
                                 suppressWarnings({
-                                        segDf <- subDf[which(df$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
-                                        pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
+                                        segDf <- subDf[which(subDf$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
+					if (nrow(segDf) > 3) {	
+                                        	pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
+					}
                                 })
                         }
                         invisible(dev.off())
@@ -707,8 +713,10 @@ if (!identical(filteredOut, character(0))) {
         pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
         for (segment in segmentOrder) {
                 suppressWarnings({
-                        segDf <- subDf[which(df$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
-                        pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
+                        segDf <- subDf[which(subDf$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
+			if (nrow(segDf) > 3) {
+                        	pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
+			}
                 })
         }
         invisible(dev.off())
