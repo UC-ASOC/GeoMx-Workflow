@@ -1,9 +1,9 @@
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # Heewon Seo (Heewon.Seo@UCalgary.ca)
 # Written on Oct 02, 2023
-# Updated on Oct 23, 2023
+# Updated on Oct 30, 2023
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
-# Settings
+# Directory settings
 setwd("/home/rstudio/R")
 source("userDefinedFunctions.R")
 
@@ -11,19 +11,13 @@ baseDir <- "/home/rstudio/analysis/"
 outDir <- file.path(baseDir, "Results")
 dir.create(outDir, showWarnings = FALSE)
 
-paramFile <- file.path(baseDir, "Settings", "parameterSettings.R")
-if (file.exists(paramFile)) { 
-	source(paramFile)
-} else {
-	stop("Provide parameterSettings.R file with -v option")
-}
-
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # Load libraries
 suppressPackageStartupMessages(library(NanoStringNCTools))
 suppressPackageStartupMessages(library(GeoMxWorkflows))
 suppressPackageStartupMessages(library(GeomxTools))
-
+suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(yaml))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(scales))
 suppressPackageStartupMessages(library(ggplot2))
@@ -31,7 +25,74 @@ suppressPackageStartupMessages(library(ggpubr))
 suppressPackageStartupMessages(library(ggsankey))
 suppressPackageStartupMessages(library(reshape2))
 suppressPackageStartupMessages(library(DescTools))
-suppressPackageStartupMessages(library(RColorBrewer))
+
+##### ##### ##### ##### ##### ##### ##### ##### ##### #####
+# Parameters loading
+paramFile <- file.path(baseDir, "config.yaml")
+
+if (file.exists(paramFile)) { 
+	config <- yaml::yaml.load_file(paramFile)
+
+        slideOrder <- config$Slide$Name
+        slideCols <- config$Slide$Color
+        names(slideCols) <- slideOrder
+        if (length(slideOrder) != config$Slide$Count) stop("Check YAML: Slide")
+
+        patientOrder <- config$Patient$Name
+        patientCols <- config$Patient$Color
+        names(patientCols) <- patientOrder
+        if (length(patientOrder) != config$Patient$Count) stop("Check YAML: Patient")
+
+        regionOrder <- config$Region$Name
+        regionCols <- config$Region$Color
+        names(regionCols) <- regionOrder
+        if (length(regionOrder) != config$Region$Count) stop("Check YAML: Region")
+
+        segmentOrder <- config$Segment$Name
+        segmentCols <- config$Segment$Color
+        names(segmentCols) <- segmentOrder
+        if (length(segmentOrder) != config$Segment$Count) stop("Check YAML: Segment")
+
+        segmentQcParams <- list(
+                minSegmentReads = config$QCparam$SegmentQC$minSegmentReads,
+                percentTrimmed = config$QCparam$SegmentQC$percentTrimmed,
+                percentStitched = config$QCparam$SegmentQC$percentStitched,
+                percentAligned = config$QCparam$SegmentQC$percentAligned,
+                percentSaturation = config$QCparam$SegmentQC$percentSaturation,
+                minNegativeCount = config$QCparam$SegmentQC$minNegativeCount,
+                maxNTCCount = config$QCparam$SegmentQC$maxNTCCount,
+                minNuclei = config$QCparam$SegmentQC$minNuclei,
+                minArea = config$QCparam$SegmentQC$minArea
+        )
+
+        segmentQC_colBy <- config$QCparam$Wrap$segmentQC_colBy
+        segmentQC_rowBy <- config$QCparam$Wrap$segmentQC_rowBy
+        segmentQC_trimmedThre <- config$SegmentQC$percentTrimmed
+        segmentQC_stitchedThre <- config$SegmentQC$percentStitched
+        segmentQC_alignedThre <- config$SegmentQC$percentAligned
+        segmentQC_saturatedThre <- config$SegmentQC$percentSaturation
+        segmentQC_nucleiThre <- config$SegmentQC$minNuclei
+        segmentQC_areaThre <- config$SegmentQC$minArea
+
+        probeQcParams <- list(
+                minProbeRatio = config$QCparam$ProbeQC$minProbeRatio,
+                percentFailGrubbs = config$QCparam$ProbeQC$percentFailGrubbs
+        )
+
+        loqCutoff <- config$QCparam$LOQ$loqCutoff
+        loqMin <- config$QCparam$LOQ$loqMin
+
+        geneDetectionRateThre <- config$QCparam$DetectionRate$geneDetectionRateThre
+        geneDetectionRateBins <- unlist(config$QCparam$DerectionRateBins$geneDetectionRate)
+        geneDetectionRateBinLabels <- config$QCparam$DerectionRateBins$geneDetectionRateLabel
+
+        coefVariationThreshold <- config$VariableGenes$coefVariationThreshold
+        howManyFeatures <- config$VariableGenes$numberOfFeatures
+
+} else {
+	stop("Provide config.yaml file with -v option")
+}
+
 
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # -- * -- Step 1 -- * --
@@ -59,7 +120,7 @@ if (length(dccFiles) < 1 || length(pkcFile) < 1 || length(annotFile) < 1) {
 }
 
 # Load data
-gSet <- readNanoStringGeoMxSet(dccFiles = dccFiles,
+initSet <- readNanoStringGeoMxSet(dccFiles = dccFiles,
                            pkcFiles = pkcFile,
                            phenoDataFile = annotFile,
                            phenoDataSheet = "Annotation",
@@ -67,71 +128,18 @@ gSet <- readNanoStringGeoMxSet(dccFiles = dccFiles,
                            protocolDataColNames = c("ROI", "AOI"),
                            experimentDataColNames = c("Panel")
 )
-saveRDS(gSet, file.path(outDir, "01_geomxSet.RDS"))
+saveRDS(initSet, file.path(outDir, "01_initSet.GeoMx.RDS"))
 message("\n\t>> GeoMx data exported to an GeoMxSet object:")
-message(paste0("\t  - Probes : ", dim(gSet)[1]))
-message(paste0("\t  - Samples: ", dim(gSet)[2]))
-
-# Export raw matrix
-outMat <- assayData(gSet)$exprs
-rownames(outMat) <- fData(gSet)$TargetName
-colnames(outMat) <- pData(gSet)$Library
-colnames(outMat)[1] <- paste0("Gene\t", colnames(outMat)[1])
-write.table(outMat, file.path(outDir, "01_RAW_count.txt"), row.names=T, col.names=T, quote=F, sep="\t")
-message("\n\t++ Created:")
-message("\t  - Results/01_RAW_count.txt")
-
-# Study design in a glance
-countDf <- pData(gSet) %>% make_long(Region, Segment, Patient)
-suppressWarnings({
-        studyDesign <- ggplot(countDf, aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
-                geom_sankey(flow.alpha = .6, node.color = "gray30") +
-                geom_sankey_label(size = 3, color = "black", fill = "white") +
-                scale_fill_viridis_d(option = "A", alpha = 0.95) +
-                theme_sankey(base_size = 18) +
-                labs(
-                        title = "Study Design",
-                        x = NULL, 
-                        y = NULL
-                ) +
-                theme_bw() +
-                theme(
-                        axis.line = element_blank(),
-                        panel.grid.major = element_blank(),
-                        panel.grid.minor = element_blank(),
-                        panel.border = element_blank(),
-                        panel.background = element_blank(),
-                        axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),
-                        axis.ticks.x = element_blank(),
-                        axis.text.y = element_blank(),
-                        axis.ticks.y = element_blank(),
-                        legend.position = "none", 
-                        text = element_text(size = 12)
-                )
-})
-
-pdf(file.path(outDir, "01_Study_design.pdf"))
-suppressWarnings(print(studyDesign))
-invisible(dev.off())
-message("\t  - Results/01_Study_design.txt")
+message(paste0("\t  - Probes : ", dim(initSet)[1]))
+message(paste0("\t  - Samples: ", dim(initSet)[2]))
 
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # -- * -- Step 2 -- * --
 # (1) Shift all zero values to one to transform in downstream analysis
-gSet <- shiftCountsOne(gSet, useDALogic = TRUE)
-saveRDS(gSet, file.path(outDir, "02_geomxSet.RDS"))
+gSet <- shiftCountsOne(initSet, useDALogic = TRUE)
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
 message("Preprocessing 02: Shift any expression counts with a value of zero (0) to")
 message("                 one (1) to enable in downstream transformations.")
-
-outMat <- assayData(gSet)$exprs
-rownames(outMat) <- fData(gSet)$TargetName
-colnames(outMat) <- pData(gSet)$Library
-colnames(outMat)[1] <- paste0("Gene\t", colnames(outMat)[1])
-
-write.table(outMat, file.path(outDir, "02_RAW_noZero.txt"), row.names=T, col.names=T, quote=F, sep="\t")
-message("\n\t++ Created:")
-message("\t  - Results/02_RAW_noZero.txt")
 
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # -- * -- Step 3 -- * --
@@ -155,15 +163,15 @@ write.table(pasteListValues(segmentQcParams), file.path(outDir, "03_Segment_QC.t
 colnames(qcSummary)[1] <- paste0("Filter\t", colnames(qcSummary)[1])
 suppressWarnings( write.table(qcSummary, file.path(outDir, "03_Segment_QC.txt"), row.names=T, col.names=T, quote=F, sep="\t", append=T) )
 
-tmpMat <- sData(gSet)
-tmpMat$Segment <- factor(tmpMat$Segment, levels = segmentOrder)
+qcMat <- sData(gSet)
+qcMat$Segment <- factor(qcMat$Segment, levels = segmentOrder)
 suppressWarnings({
-        qc1 <- histQC(tmpMat, "Trimmed (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_trimmedThre, cols = segmentCols)
-        qc2 <- histQC(tmpMat, "Stitched (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_stitchedThre, cols = segmentCols)
-        qc3 <- histQC(tmpMat, "Aligned (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_alignedThre, cols = segmentCols)
-        qc4 <- histQC(tmpMat, "Saturated (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_saturatedThre, cols = segmentCols)
-        qc5 <- histQC(tmpMat, "area", segmentQC_colBy, segmentQC_rowBy, segmentQC_areaThre, "log10", "AOI Area (log10)", cols = segmentCols)
-        qc6 <- histQC(tmpMat, "nuclei", segmentQC_colBy, segmentQC_rowBy, segmentQC_nucleiThre, "log10", "AOI nuclei count", cols = segmentCols)
+        qc1 <- histQC(qcMat, "Trimmed (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_trimmedThre, cols = segmentCols)
+        qc2 <- histQC(qcMat, "Stitched (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_stitchedThre, cols = segmentCols)
+        qc3 <- histQC(qcMat, "Aligned (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_alignedThre, cols = segmentCols)
+        qc4 <- histQC(qcMat, "Saturated (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_saturatedThre, cols = segmentCols)
+        qc5 <- histQC(qcMat, "area", segmentQC_colBy, segmentQC_rowBy, segmentQC_areaThre, "log10", "AOI Area (log10)", cols = segmentCols)
+        qc6 <- histQC(qcMat, "nuclei", segmentQC_colBy, segmentQC_rowBy, segmentQC_nucleiThre, "log10", "AOI nuclei count", cols = segmentCols)
 })
 
 pdf(file.path(outDir, "03_Segment_QC_before.pdf"))
@@ -176,20 +184,19 @@ print(qc6)
 invisible(dev.off())
 
 gSet <- gSet[, segmentQcResults$QCStatus == "PASS"]
-saveRDS(gSet, file.path(outDir, "03_geomxSet.RDS"))
 message("\n\t>> Removed flagged samples(segments):")
 message(paste0("\t  - Probes : ", dim(gSet)[1]))
 message(paste0("\t  - Samples: ", dim(gSet)[2]))
 
-tmpMat <- sData(gSet)
-tmpMat$Segment <- factor(tmpMat$Segment, levels = segmentOrder)
+afterQcMat <- sData(gSet)
+afterQcMat$Segment <- factor(afterQcMat$Segment, levels = segmentOrder)
 suppressWarnings({
-        qc1 <- histQC(tmpMat, "Trimmed (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_trimmedThre, cols = segmentCols)
-        qc2 <- histQC(tmpMat, "Stitched (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_stitchedThre, cols = segmentCols)
-        qc3 <- histQC(tmpMat, "Aligned (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_alignedThre, cols = segmentCols)
-        qc4 <- histQC(tmpMat, "Saturated (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_saturatedThre, cols = segmentCols)
-        qc5 <- histQC(tmpMat, "area", segmentQC_colBy, segmentQC_rowBy, segmentQC_areaThre, "log10", "AOI Area (log10)", cols = segmentCols)
-        qc6 <- histQC(tmpMat, "nuclei", segmentQC_colBy, segmentQC_rowBy, segmentQC_nucleiThre, "log10", "AOI nuclei count", cols = segmentCols)
+        qc1 <- histQC(afterQcMat, "Trimmed (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_trimmedThre, cols = segmentCols)
+        qc2 <- histQC(afterQcMat, "Stitched (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_stitchedThre, cols = segmentCols)
+        qc3 <- histQC(afterQcMat, "Aligned (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_alignedThre, cols = segmentCols)
+        qc4 <- histQC(afterQcMat, "Saturated (%)", segmentQC_colBy, segmentQC_rowBy, segmentQC_saturatedThre, cols = segmentCols)
+        qc5 <- histQC(afterQcMat, "area", segmentQC_colBy, segmentQC_rowBy, segmentQC_areaThre, "log10", "AOI Area (log10)", cols = segmentCols)
+        qc6 <- histQC(afterQcMat, "nuclei", segmentQC_colBy, segmentQC_rowBy, segmentQC_nucleiThre, "log10", "AOI nuclei count", cols = segmentCols)
 })
 
 pdf(file.path(outDir, "03_Segment_QC_after.pdf"))
@@ -219,17 +226,16 @@ negativeGeoMeans <- esBy(
 )
 protocolData(gSet)[[negCol]] <- negativeGeoMeans
 pData(gSet)[, negCol] <- sData(gSet)[[negCol]]
-saveRDS(gSet, file.path(outDir, "04_geomxSet.RDS"))
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
 message("Preprocessing 04: Calculate negative count which is the geometric mean of")
 message("                 the several unique negative probes in the GeoMx panel that")
 message("                 do not target mRNA and establish the background count level")
 message("                 per segment.")
 
-tmpMat <- sData(gSet)
-tmpMat <- tmpMat[,c(negCol, segmentQC_colBy, segmentQC_rowBy)]
-tmpMat$Segment <- factor(tmpMat$Segment, levels = segmentOrder)
-qc <- histQC(tmpMat, negCol, segmentQC_colBy, segmentQC_rowBy, 2, "log10", "GeoMean(negative probes)", cols = segmentCols)
+backgrounMat <- sData(gSet)
+backgrounMat <- backgrounMat[, c("NegGeoMean", segmentQC_colBy, segmentQC_rowBy)]
+backgrounMat$Segment <- factor(backgrounMat$Segment, levels = segmentOrder)
+qc <- histQC(backgrounMat, "NegGeoMean", segmentQC_colBy, segmentQC_rowBy, 2, "log10", "GeoMean(negative probes)", cols = segmentCols)
 pdf(file.path(outDir, "04_Negative_probes.pdf"))
 print(qc)
 invisible(dev.off())
@@ -264,7 +270,6 @@ probeQcPassed <- subset(
         fData(gSet)[["QCFlags"]][,c("GlobalGrubbsOutlier")] == FALSE
 )
 gSet <- probeQcPassed
-saveRDS(gSet, file.path(outDir, "05_geomxSet.RDS"))
 
 message("\n\t>> Removed flagged probes:")
 message(paste0("\t  - Probes : ", dim(gSet)[1]))
@@ -277,6 +282,7 @@ newSet <- aggregateCounts(gSet)
 
 #Exclude negative control from the gene list
 newSet <- subset(newSet, fData(newSet)$TargetName != "NegProbe-WTX")
+saveRDS(as.data.frame(pData(newSet)), file.path(outDir, "00_finalStats.RDS"))
 
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
 message("Preprocessing 06: Generate a gene-level count matrix where the count for")
@@ -286,20 +292,113 @@ message("\n\t>> Collapse to targets/genes:")
 message(paste0("\t  - Genes  : ", dim(newSet)[1]))
 message(paste0("\t  - Samples: ", dim(newSet)[2]))
 
-saveRDS(newSet, file.path(outDir, "06_geomxSet.RDS"))
-saveRDS(as.data.frame(pData(newSet)), file.path(outDir, "00_finalStats.RDS"))
-
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # -- * -- Step 7 -- * --
 # (1) Calculate LOQ
 # (2) Filter out low signal segments/genes compared to the background
+message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
+message("Preprocessing 07-1: Check the distribution of the number of nuclei estimated")
+message("                 and area of the AOIs, and their correlations.")
+
+lowLvqcDf <- data.frame(
+        Slide = pData(newSet)$Slide,
+        Sample = pData(newSet)$Library,
+        Segment = pData(newSet)$Segment,
+        Area = pData(newSet)$area,
+        Nuclei = pData(newSet)$nuclei
+)
+lowLvqcDf$Slide <- factor(lowLvqcDf$Slide, levels=slideOrder)
+lowLvqcDf$Segment <- factor(lowLvqcDf$Segment, levels=segmentOrder)
+
+dodge <- position_dodge(width = 0.5)
+suppressWarnings({
+        violin1 <- ggplot(data = lowLvqcDf, aes(x = Segment, y = Area, fill = Segment)) +
+                geom_violin(position = dodge, size = 0) +
+                geom_boxplot(width = 0.1, position = dodge, fill="white") +
+                scale_fill_manual(values = segmentCols) +
+                facet_wrap( ~ Slide) +
+                labs(
+                        title = "",
+                        x = "", 
+                        y = "Area"
+                ) +
+                theme_bw() +
+                theme(
+                        axis.line = element_line(colour = "black"),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        panel.border = element_blank(),
+                        panel.background = element_blank(),
+                        axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),
+                        legend.position = "none", 
+                        text = element_text(size = 12)
+                ) + 
+                scale_y_continuous(trans = "log10")
+})
+
+suppressWarnings({
+        violin2 <- ggplot(data = lowLvqcDf, aes(x = Segment, y = Nuclei, fill = Segment)) +
+                geom_violin(position = dodge, size = 0) +
+                geom_boxplot(width = 0.1, position = dodge, fill="white") +
+                scale_fill_manual(values = segmentCols) +
+                facet_wrap( ~ Slide) +
+                labs(
+                        title = "",
+                        x = "", 
+                        y = "#Nuclei"
+                ) +
+                theme_bw() +
+                theme(
+                        axis.line = element_line(colour = "black"),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        panel.border = element_blank(),
+                        panel.background = element_blank(),
+                        axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),
+                        legend.position = "none", 
+                        text = element_text(size = 12)
+                ) + 
+                scale_y_continuous(trans = "log10")
+})
+
+suppressWarnings({
+        scatterPlot <- ggplot(data = lowLvqcDf, aes(x = Area, y = Nuclei, color = Segment, label = Sample, label2 = Slide)) +
+                geom_point() +
+                scale_color_manual(values = segmentCols) +
+                labs(
+                        title = "",
+                        x = "Area", 
+                        y = "#Nuclei"
+                ) +
+                theme_bw() +
+                theme(
+                        axis.line = element_line(colour = "black"),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        panel.border = element_blank(),
+                        panel.background = element_blank(),
+                        axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),
+                        text = element_text(size = 12)
+                ) + 
+                scale_x_continuous(trans = "log10") + 
+                scale_y_continuous(trans = "log10")
+})
+
+pdf(file.path(outDir, "07_1_Low_level_QC.pdf"))
+print(violin1)
+print(violin2)
+print(scatterPlot)
+invisible(dev.off())
+message("\n\t++ Created:")
+message("\t  - Results/07_1_Low_level_QC.txt")
+
 loqDf <- data.frame(row.names = colnames(newSet))
-tmpVar <- paste0(c("NegGeoMean_", "NegGeoSD_"), module)
-if(all(tmpVar[1:2] %in% colnames(pData(newSet)))) {
-        loqDf[, module] <- pData(newSet)[, tmpVar[1]] * (pData(newSet)[, tmpVar[2]] ^ loqCutoff)
+varNames <- paste0(c("NegGeoMean_", "NegGeoSD_"), module)
+if (all(varNames[1:2] %in% colnames(pData(newSet)))) {
+        loqDf[, module] <- pData(newSet)[, varNames[1]] * (pData(newSet)[, varNames[2]]^loqCutoff)
 }
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
-message("Preprocessing 07-1: Determine the limit of quantification (LOQ) per segment")
+message("Preprocessing 07-2: Determine the limit of quantification (LOQ) per segment")
 message("                 where the LOQ is calculated based on the distribution of")
 message("                 negative control probes and is intended to approximate")
 message("                 the quantifiable limit of gene expression per segment.")
@@ -323,7 +422,7 @@ statDf$Segment <- factor(statDf$Segment, levels=segmentOrder)
 
 dodge <- position_dodge(width = 0.5)
 suppressWarnings({
-        violin <- ggplot(data = statDf, aes(x = Segment, y = log10(LOQ), fill = Segment)) +
+        violin3 <- ggplot(data = statDf, aes(x = Segment, y = log10(LOQ), fill = Segment)) +
                 geom_violin(position = dodge, size = 0) +
                 geom_boxplot(width = 0.1, position = dodge, fill="white") +
                 scale_fill_manual(values = segmentCols) +
@@ -347,68 +446,67 @@ suppressWarnings({
                 geom_hline(aes(yintercept = log10(2)), lty=2, col="grey50")
 })
 
-pdf(file.path(outDir, "07_LOQ_perSegment.pdf"))
-print(violin)
-invisible(dev.off())
-message("\n\t++ Created:")
-message("\t  - Results/07_LOQ_perSegment.pdf")
-
-violin <- ggplot(data = statDf, aes(x = Segment, y = log10(LOQ), fill = Segment)) +
-        geom_violin(position = dodge, size = 0) +
-        geom_boxplot(width = 0.1, position = dodge, fill="white") +
-        scale_fill_manual(values = segmentCols) +
-        facet_grid(~Slide) + 
-        labs(
-                title = "",
-                subtitle = "",
-                x = "Segment", 
-                y = "LOQ, log10"
-        ) +
-        theme_bw() +
-        theme(
-                axis.line = element_line(colour = "black"),
-                panel.grid.major = element_blank(),
-                panel.grid.minor = element_blank(),
-                panel.border = element_blank(),
-                panel.background = element_blank(),
-                axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0.5),
-                legend.position = "none", 
-                text = element_text(size = 12)
-        ) + 
-        geom_hline(aes(yintercept = log10(2)), lty=2, col="grey50")
+suppressWarnings({
+        violin4 <- ggplot(data = statDf, aes(x = Segment, y = log10(LOQ), fill = Segment)) +
+                geom_violin(position = dodge, size = 0) +
+                geom_boxplot(width = 0.1, position = dodge, fill="white") +
+                scale_fill_manual(values = segmentCols) +
+                facet_grid(~Slide) + 
+                labs(
+                        title = "",
+                        subtitle = "",
+                        x = "Segment", 
+                        y = "LOQ, log10"
+                ) +
+                theme_bw() +
+                theme(
+                        axis.line = element_line(colour = "black"),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        panel.border = element_blank(),
+                        panel.background = element_blank(),
+                        axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0.5),
+                        legend.position = "none", 
+                        text = element_text(size = 12)
+                ) + 
+                geom_hline(aes(yintercept = log10(2)), lty=2, col="grey50")
+})
  
-pdf(file.path(outDir, "07_LOQ_perSlideSegment.pdf"))
-print(violin)
+pdf(file.path(outDir, "07_2_LOQ_Distribution.pdf"))
+print(violin3)
+print(violin4)
 invisible(dev.off())
-message("\t  - Results/07_LOQ_perSlideSegment.pdf")
+message("\t  - Results/07_2_LOQ_Distribution.pdf")
 
-qc <- ggplot(data=statDf, aes(x=Sample, y=log10(LOQ), group=Segment)) +
-        geom_line(aes(color=Segment), lwd=0.5) +
-        geom_point(aes(color=Segment)) +
-        scale_color_brewer(palette="Dark2") + 
-        labs(
-                title = "",
-                x = "", 
-                y = "LOQ, log10"
-        ) +
-        theme_bw() +
-        theme(
-                axis.line = element_line(colour = "black"),
-                panel.grid.major = element_blank(),
-                panel.grid.minor = element_blank(),
-                panel.border = element_blank(),
-                panel.background = element_blank(),
-                axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0.5),
-                text = element_text(size = 12)
-        ) + 
-        geom_hline(aes(yintercept = log10(2)), lty=2, col="grey50")
- 
-pdf(file.path(outDir, "07_LOQ_perSample.pdf"), width=15)
-print(qc)
+suppressWarnings({
+        scatterPlot2 <- ggplot(data=statDf, aes(x=Sample, y=log10(LOQ), group=Segment)) +
+                geom_line(aes(color=Segment), lwd=0.5) +
+                geom_point(aes(color=Segment)) +
+                scale_color_brewer(palette="Dark2") + 
+                labs(
+                        title = "",
+                        x = "", 
+                        y = "LOQ, log10"
+                ) +
+                theme_bw() +
+                theme(
+                        axis.line = element_line(colour = "black"),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        panel.border = element_blank(),
+                        panel.background = element_blank(),
+                        axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0.5),
+                        text = element_text(size = 12)
+                ) + 
+                geom_hline(aes(yintercept = log10(2)), lty=2, col="grey50")
+})
+
+pdf(file.path(outDir, "07_2_LOQ_perSample.pdf"), width=15)
+print(scatterPlot2)
 invisible(dev.off())
-message("\t  - Results/07_LOQ_perSample.pdf")
+message("\t  - Results/07_2_LOQ_perSample.pdf")
 
-loqDf[loqDf < 2] <- 2
+loqDf[loqDf < loqMin] <- loqMin
 pData(newSet)$LOQ <- loqDf
 
 loqMat <- t(esApply(newSet, MARGIN = 1, FUN = function(x) { x > LOQ[, module] }) )
@@ -417,31 +515,27 @@ loqMat <- loqMat[fData(newSet)$TargetName, ] # Ordering
 # Segment gene detection
 pData(newSet)$GenesDetected <- colSums(loqMat, na.rm = TRUE)
 pData(newSet)$GeneDetectionRate <- pData(newSet)$GenesDetected / nrow(newSet)
-pData(newSet)$DetectionThreshold <- cut(pData(newSet)$GeneDetectionRate, breaks = geneDetectionRate, labels = geneDetectionRateLabel)
-saveRDS(newSet, file.path(outDir, "07_geomxSet_beforeFiltering.RDS"))
+pData(newSet)$DetectionThreshold <- cut(pData(newSet)$GeneDetectionRate, breaks = geneDetectionRateBins, labels = geneDetectionRateBinLabels)
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
-message("Preprocessing 07-2: Filter out segments with exceptionally low signal that")
+message("Preprocessing 07-3: Filter out segments with exceptionally low signal that")
 message("                 have a small fraction of panel genes detected above the LOQ")
 message("                 relative to the other segments in the study.")
 
-write.table(paste0("# Gene detection rate threshold > ", geneDetectionRateThre), file.path(outDir, "07_Segment_gene_detection.txt"), row.names=F, col.names=F, quote=F, sep="\t")
-suppressWarnings(write.table(t(table(pData(newSet)$DetectionThreshold)), file.path(outDir, "07_Segment_gene_detection.txt"), row.names=F, col.names=T, quote=F, sep="\t", append=T))
+write.table(paste0("# Gene detection rate threshold > ", geneDetectionRateThre), file.path(outDir, "07_3_Segment_gene_detection.txt"), row.names=F, col.names=F, quote=F, sep="\t")
+suppressWarnings(write.table(t(table(pData(newSet)$DetectionThreshold)), file.path(outDir, "07_3_Segment_gene_detection.txt"), row.names=F, col.names=T, quote=F, sep="\t", append=T))
 message("\n\t++ Created:")
-message("\t  - Results/07_Segment_gene_detection.txt")
+message("\t  - Results/07_3_Segment_gene_detection.txt")
 
-tmpMat <- pData(newSet)
-tmpMat$Segment <- factor(tmpMat$Segment, levels = segmentOrder)
+rateMat <- pData(newSet)
+rateMat$Segment <- factor(rateMat$Segment, levels = segmentOrder)
 suppressWarnings({
-        barplot <- ggplot(tmpMat, aes(x = DetectionThreshold)) +
+        barplot <- ggplot(rateMat, aes(x = DetectionThreshold)) +
                 geom_bar(aes(fill = Segment)) +
                 geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
                 scale_fill_manual(values = segmentCols) +
                 theme_bw() +
                 theme(
                         axis.line = element_line(colour = "black"),
-                        # panel.grid.major = element_blank(),
-                        # panel.grid.minor = element_blank(),
-                        # panel.border = element_blank(),
                         panel.background = element_blank(),
                         axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0),
                         text = element_text(size = 12)
@@ -454,10 +548,10 @@ suppressWarnings({
                 facet_grid(as.formula(paste("~", segmentQC_rowBy)))
 })
 
-pdf(file.path(outDir, "07_detectedGenes_summary.pdf"))
+pdf(file.path(outDir, "07_3_DetectedGenes_summary.pdf"))
 print(barplot)
 invisible(dev.off())
-message("\t  - Results/07_detectedGenes_summary.txt")
+message("\t  - Results/07_3_DetectedGenes_summary.txt")
 
 statDf <- data.frame(
         Sample = protocolData(newSet)$AOI, # pData(newSet)$Sample,
@@ -467,52 +561,48 @@ statDf <- data.frame(
 )
 statDf$Segment <- factor(statDf$Segment, segmentOrder)
 
-pdf(file.path(outDir, "07_detectedGenes.pdf"))
+pdf(file.path(outDir, "07_3_DetectedGenes.pdf"))
 for (segment in segmentOrder) {
         tmpDf <- statDf[which(statDf$Segment == segment),]
         tmpDf <- tmpDf[order(tmpDf$GenesDetected, decreasing = F),]
         tmpDf$Sample <- factor(tmpDf$Sample, levels=tmpDf$Sample)
-        barplot <- ggplot(tmpDf, aes(x = Sample, y = GenesDetected, fill = Segment)) +
-                geom_bar(stat = "identity") +
-                # geom_line(aes(x = Sample, y = Nuclei), size = 1, group = 1) +
-                # scale_y_continuous(
-                #         name = "Number of Genes detected",
-                #         sec.axis = sec_axis(trans = ~ ., name = "Number of Nuclei")
-                # ) +
-                scale_fill_manual(values = segmentCols[segment]) +
-                theme_minimal() +
-                labs(
-                        title = "",
-                        x = "Sample"
-                ) +
-                coord_flip() +
-                theme_bw() +
-                theme(
-                        axis.line = element_line(colour = "black"),
-                        panel.grid.major = element_blank(),
-                        panel.grid.minor = element_blank(),
-                        panel.border = element_blank(),
-                        panel.background = element_blank(),
-                        axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0),
-                        legend.position = "none"
-                )
+        suppressWarnings({
+                barplot <- ggplot(tmpDf, aes(x = Sample, y = GenesDetected, fill = Segment)) +
+                        geom_bar(stat = "identity") +
+                        scale_fill_manual(values = segmentCols[segment]) +
+                        theme_minimal() +
+                        labs(
+                                title = "",
+                                x = "Sample"
+                        ) +
+                        coord_flip() +
+                        theme_bw() +
+                        theme(
+                                axis.line = element_line(colour = "black"),
+                                panel.grid.major = element_blank(),
+                                panel.grid.minor = element_blank(),
+                                panel.border = element_blank(),
+                                panel.background = element_blank(),
+                                axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0),
+                                legend.position = "none"
+                        )
+        })
         print(barplot)
 }
 invisible(dev.off())
-message("\t  - Results/07_detectedGenes.txt")
+message("\t  - Results/07_3_DetectedGenes.txt")
 
 newSet <- newSet[, pData(newSet)$GeneDetectionRate >= geneDetectionRateThre]
 message("\n\t>> After filtering out low signal sample/segment based on LOQ:")
 message(paste0("\t  - Genes  : ", dim(newSet)[1]))
 message(paste0("\t  - Samples: ", dim(newSet)[2]))
-saveRDS(newSet, file.path(outDir, "07_geomxSet_afterFiltering.RDS"))
 
 # Gene detection rate
 loqMat <- loqMat[, colnames(newSet)]
 fData(newSet)$DetectedSegments <- rowSums(loqMat, na.rm = TRUE)
 fData(newSet)$DetectionRate <- fData(newSet)$DetectedSegments / nrow(pData(newSet))
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
-message("Preprocessing 07-3: Determine the detection rate for genes across the study")
+message("Preprocessing 07-4: Determine the detection rate for genes across the study")
 message("                 where individual genes are detected to varying degrees in")
 message("                 the segments. In other words, we will calculate the total number")
 message("                 of genes detected in different percentages of segments to filter")
@@ -524,17 +614,17 @@ geneDetectionRateDf <- data.frame(
         DetectionRate = percent(fData(newSet)$DetectionRate)
 )
 geneDetectionRateDf <- geneDetectionRateDf[order(geneDetectionRateDf$Number, geneDetectionRateDf$DetectionRate, geneDetectionRateDf$Gene),]
-write.table(geneDetectionRateDf, file.path(outDir, "07_Gene_detection_rate.txt"), row.names=F, col.names=T, quote=F, sep="\t")
+write.table(geneDetectionRateDf, file.path(outDir, "07_4_Gene_detection_rate.txt"), row.names=F, col.names=T, quote=F, sep="\t")
 
 negativeProbefData <- subset(fData(newSet), CodeClass == "Negative")
 neg_probes <- unique(negativeProbefData$TargetName)
 finalSet <- newSet[fData(newSet)$DetectionRate >= geneDetectionRateThre | fData(newSet)$TargetName %in% neg_probes, ]
-saveRDS(finalSet, file.path(outDir, "07_geomxSet.RDS"))
+saveRDS(finalSet, file.path(outDir, "07_finalSet.GeoMx.RDS"))
 message("\n\t>> After filtering out low signal gene:")
 message(paste0("\t  - Genes  : ", dim(finalSet)[1]))
 message(paste0("\t  - Samples: ", dim(finalSet)[2]))
 
-countDf <- pData(gSet) %>% make_long(Region, Segment, Patient)
+countDf <- pData(finalSet) %>% make_long(Region, Segment, Patient)
 suppressWarnings({
         studyDesign <- ggplot(countDf, aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
                 geom_sankey(flow.alpha = .6, node.color = "gray30") +
@@ -562,166 +652,144 @@ suppressWarnings({
                 )
 })
 
-pdf(file.path(outDir, "07_Study_design.pdf"))
+pdf(file.path(outDir, "07_4_Study_design.pdf"))
 suppressWarnings(print(studyDesign))
 invisible(dev.off())
 message("\n\t++ Created:")
-message("\t  - Results/07_Gene_detection_rate.txt")
-message("\t  - Results/07_Study_design.pdf")
+message("\t  - Results/07_4_Study_design.pdf")
+message("\t  - Results/07_4_Gene_detection_rate.txt")
 
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # -- * -- Step 8 -- * --
 # (1) Normalization
 finalSet <- normalize(finalSet, norm_method = "quant", desiredQuantile = .75, toElt = "q_norm")
 # finalSet <- normalize(finalSet, norm_method = "neg", fromElt = "exprs", toElt = "neg_norm") # Background normalization for WTA without custom spike-in
-saveRDS(finalSet, file.path(outDir, "08_geomxSet.RDS"))
+annot <- pData(finalSet)
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
 message("Preprocessing 08: Upper-quartile (Q3) normalization method estimates")
 message("                 a normalization factor per segment to bring the segment")
 message("                 data distributions together.")
 
-outMat <- assayData(finalSet)$exprs
-colnames(outMat) <- pData(finalSet)$Library
-write.table(outMat, file.path(outDir, "08_exprMat.txt"), row.names=T, col.names=T, quote=F, sep="\t")
-message("\n\t++ Created:")
-message("\t  - Results/08_exprMat.txt")
+segmentIdx <- c()
+for (segment in segmentOrder) segmentIdx <- c(segmentIdx, which(annot$Segment == segment))
 
-outMat <- assayData(finalSet)$q_norm
-colnames(outMat) <- pData(finalSet)$Library
-write.table(outMat, file.path(outDir, "08_exprMat_UQ.txt"), row.names=T, col.names=T, quote=F, sep="\t")
-message("\t  - Results/08_exprMat_UQ.txt")
+rawMat <- assayData(finalSet)$exprs
+colnames(rawMat) <- annot$Library
+rawDf <- melt(rawMat)
+colnames(rawDf) <- c("Gene", "Sample", "Expression")
+rawDf$Segment <- rep(annot$Segment, each=nrow(rawMat))
+rawDf$Segment <- factor(rawDf$Segment, levels = segmentOrder)
 
-# library(vsn)
-# vsnNorm <- vsn2(outMat)@hx
-# write.table(vsnNorm, file.path(outDir, "08_exprMat_UQ_VSN.txt"), row.names=T, col.names=T, quote=F, sep="\t")
-# message("  - Output/08_exprMat_UQ.txt")
+normMat <- assayData(finalSet)$q_norm
+colnames(normMat) <- annot$Library
+normDf <- melt(normMat)
+colnames(normDf) <- c("Gene", "Sample", "Expression")
+normDf$Segment <- rep(annot$Segment, each=nrow(rawMat))
+normDf$Segment <- factor(normDf$Segment, levels = segmentOrder)
 
-# To compare before & after
-noFilterSet <- readRDS(file.path(outDir, "07_geomxSet_beforeFiltering.RDS"))
-noFilterSet <- normalize(noFilterSet, norm_method = "quant", desiredQuantile = .75, toElt = "q_norm")
-saveRDS(noFilterSet, file.path(outDir, "08_geomxSet_noFiltering.RDS"))
+pdf(file.path(outDir, "08_Before_norm_perSegment.pdf"))
+suppressWarnings(boxplot(log10(Expression) ~ Segment, data = rawDf, col = segmentCols, pch = 20, ylab = "Expression, log10", xlab = "Raw count"))
+invisible(dev.off())
+
+rawMat <- rawMat[, segmentIdx]
+pdf(file.path(outDir, "08_Before_norm_perSample.pdf"), width=12)
+suppressWarnings(boxplot(log10(rawMat), col = segmentCols[annot$Segment[segmentIdx]], pch = 20, names = NA, xlab = "Sample", ylab = "Raw count, log10"))
+invisible(dev.off())
+
+pdf(file.path(outDir, "08_After_norm_perSegment.pdf"))
+suppressWarnings(boxplot(log10(Expression) ~ Segment, data = normDf, col = segmentCols, pch = 20, ylab = "", xlab = "Upper-quartile norm"))
+invisible(dev.off())
+
+normMat <- normMat[, segmentIdx]
+pdf(file.path(outDir, "08_After_norm_perSample.pdf"), width=12)
+suppressWarnings(boxplot(log10(normMat), col = segmentCols[annot$Segment[segmentIdx]], pch = 20, names = NA, xlab = "Sample", ylab = "Upper-quartile norm, log10"))
+invisible(dev.off())
 
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # -- * -- Step 9 -- * --
-# (1) Before & after diagnostic plots
-finalSetExpr <- apply(assayData(finalSet)$q_norm, 2, median)
-noFilterExpr <- apply(assayData(noFilterSet)$q_norm, 2, median)
-message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
-message("Preprocessing 09: Generate diagnostic plots to investigate before and")
-message("                 after QC.")
+# (1) PCA
+normMat <- assayData(finalSet)$q_norm
+pcaRes <- prcomp(t(normMat), scale = TRUE)
+pcaDf <- data.frame(
+        Sample = annot$Library,
+        X = pcaRes$x[, 1],
+        Y = pcaRes$x[, 2],
+        Slide = annot$Slide,
+        Segment = annot$Segment,
+        Region = annot$Region
+)
+pcaDf$Slide <- factor(pcaDf$Slide, levels = slideOrder)
+pcaDf$Segment <- factor(pcaDf$Segment, levels = segmentOrder)
+pcaDf$Region <- factor(pcaDf$Region)
 
-segmentNames <- list(All = rownames(pData(noFilterSet)), FilterIn = rownames(pData(finalSet)), FilterOut = setdiff(rownames(pData(noFilterSet)), rownames(pData(finalSet))))
-write.table(pasteListValues(sapply(segmentNames, length), FALSE), file.path(outDir, "09_Stats.txt"), row.names=F, col.names=F, quote=F)
-message("\n\t++ Created:")
-message("\t  - Results/09_Stats.txt")
+suppressWarnings({
+        pcaPlot1 <- ggplot(data = pcaDf, aes(x = X, y = Y, color = Slide, label = Sample)) +
+                geom_point(size = 2, shape = 20) +
+                scale_color_manual(values = slideCols) +
+                labs(
+                        x = paste0("PC1 (", round(summary(pcaRes)$importance[2, c(1)] * 100, 1), "%)"),
+                        y = paste0("PC2 (", round(summary(pcaRes)$importance[2, c(2)] * 100, 1), "%)")
+                ) +
+                theme_bw() +
+                theme(
+                        axis.line = element_line(colour = "black"),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        panel.border = element_blank(),
+                        panel.background = element_blank(),
+                        axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),
+                        text = element_text(size = 12)
+                )
+})
+pdf(file.path(outDir, "09_PCA_perSlide.pdf"))
+print(pcaPlot1)
+invisible(dev.off())
 
-filteredOut <- setdiff(rownames(pData(noFilterSet)), rownames(pData(finalSet)))
-if (!identical(filteredOut, character(0))) {
-        stats <- pData(noFilterSet)
-        df <- data.frame(
-                Slide = stats$Slide,
-                Sample = stats$Sample,
-                Segment = stats$Segment,
-                Area = stats$area,
-                Nuclei = stats$nuclei,
-                LOQ = stats$LOQ,
-                GenesDetected = stats$GenesDetected,
-                GenesDetRate = stats$GeneDetectionRate,
-                Filter = 0
-        )
-        colnames(df)[6] <- "LOQ"
-        df$Filter[which(rownames(df) %in% colnames(finalSet))] <- 1
-        df$Slide <- factor(df$Slide, levels=slideOrder)
-        df$Segment <- factor(df$Segment, levels=segmentOrder)
+suppressWarnings({
+        pcaPlot2 <- ggplot(data = pcaDf, aes(x = X, y = Y, color = Segment, label = Sample)) +
+                geom_point(size = 2, shape = 20) +
+                scale_color_manual(values = segmentCols) +
+                labs(
+                        x = paste0("PC1 (", round(summary(pcaRes)$importance[2, c(1)] * 100, 1), "%)"),
+                        y = paste0("PC2 (", round(summary(pcaRes)$importance[2, c(2)] * 100, 1), "%)")
+                ) +
+                theme_bw() +
+                theme(
+                        axis.line = element_line(colour = "black"),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        panel.border = element_blank(),
+                        panel.background = element_blank(),
+                        axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),
+                        text = element_text(size = 12)
+                )
+})
+pdf(file.path(outDir, "09_PCA_perSegment.pdf"))
+print(pcaPlot2)
+invisible(dev.off())
 
-        for (segment in segmentOrder) {
-                subDf <- df[which(df$Segment == segment),]
-                table <- xtabs( ~ Filter + Slide, data = subDf)
-                fisherObj <- try(fisher.test(table), silent=TRUE)
-                if(is(fisherObj, "try-error")) { fisherP <- NA } else { fisherP <- formatC(fisherObj$p.value, format="e", digits=2) }
-                cattObj <- try(CochranArmitageTest(table, alternative = c("two.sided")), silent=TRUE)
-                if(is(cattObj, "try-error")) { cattP <- NA } else { cattP <- formatC(cattObj$p.value, format="e", digits=2) }
-                rowSum <- apply(table, 1, sum)
-                table <- cbind(table, rowSum)
-                colSum <- apply(table, 2, sum)
-                table <- rbind(table, colSum)
-                colnames(table)[1] <- paste0("Filter\t", colnames(table)[1])
-                colnames(table)[ncol(table)] <- "TOTAL"
-                rownames(table) <- c("Out", "In", "TOTAL")
-
-                write.table(paste0("# Fisher Exact Test, p-value = ", fisherP, "\n# Cochran-Armitage Trend Test, p-value = ", cattP), file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=F, col.names=F, quote=F, sep="\t")
-                suppressWarnings(write.table(table, file.path(outDir, paste0("09_Stats_", segment, ".txt")), row.names=T, col.names=T, quote=F, sep="\t", append=T))
-                message(paste0("\t  - Results/09_Stats_", segment, ".txt"))
-        }
-
-        dummies <- sapply(seq_along(segmentNames), function(idx) {        
-                prefix <- names(segmentNames)[idx]
-                selectSegments <- segmentNames[[idx]]
-
-                if (length(selectSegments) > 0) {
-                        subDf <- df[which(rownames(df) %in% selectSegments),]
-                        subDf <- data.frame(subDf, MedianExpression = noFilterExpr[selectSegments])
-                        
-                        b1 <- boxQC(subDf, "Segment", "Area", "Slide", "log10", cols = segmentCols)
-                        b2 <- boxQC(subDf, "Segment", "Nuclei", "Slide", "log10", cols = segmentCols)
-                        b3 <- boxQC(subDf, "Segment", "LOQ", "Slide", "log10", cols = segmentCols)
-                        b4 <- boxQC(subDf, "Segment", "MedianExpression", "Slide", "log10", cols = segmentCols, yLabel = "Median expression")
-                        
-                        pdf(file.path(outDir, paste0("09_Boxplot_", prefix, ".pdf")))
-                        print(b1)
-                        print(b2)
-                        print(b3)
-                        print(b4)
-                        invisible(dev.off())
-                        message(paste0("\t  - Results/09_Boxplot_", prefix, ".pdf"))
-
-                        pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
-                        for (segment in segmentOrder) {
-                                suppressWarnings({
-                                        segDf <- subDf[which(subDf$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
-					if (nrow(segDf) > 3) {	
-                                        	pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
-					}
-                                })
-                        }
-                        invisible(dev.off())
-                        message(paste0("\t  - Results/09_Scatterplot_", segment, ".pdf"))
-                }
-
-                return(idx) # dummy
-        })
-
-        prefix <- "FilterIn_UQ3"
-        selectSegments <- segmentNames[[2]]
-
-        subDf <- df[which(rownames(df) %in% selectSegments),]
-        subDf <- data.frame(subDf, MedianExpression = finalSetExpr)
-
-        b1 <- boxQC(subDf, "Segment", "Area", "Slide", "log10", cols = segmentCols)
-        b2 <- boxQC(subDf, "Segment", "Nuclei", "Slide", "log10", cols = segmentCols)
-        b3 <- boxQC(subDf, "Segment", "LOQ", "Slide", "log10", cols = segmentCols)
-        b4 <- boxQC(subDf, "Segment", "MedianExpression", "Slide", "log10", cols = segmentCols, yLabel = "Median expression")
-
-        pdf(file.path(outDir, paste0("09_Boxplot_", prefix, ".pdf")))
-        print(b1)
-        print(b2)
-        print(b3)
-        print(b4)
-        invisible(dev.off())
-        message(paste0("\t  - Results/09_Boxplot_", prefix, ".pdf"))
-
-        pdf(file.path(outDir, paste0("09_Scatterplot_", prefix, ".pdf")))
-        for (segment in segmentOrder) {
-                suppressWarnings({
-                        segDf <- subDf[which(subDf$Segment == segment), c("Area", "Nuclei", "LOQ", "MedianExpression")]
-			if (nrow(segDf) > 3) {
-                        	pairs(segDf, lower.panel=panel.cor, upper.panel=panel.lm, pch=20, cex=2, main=segment, col=segmentCols[segment])
-			}
-                })
-        }
-        invisible(dev.off())
-        message(paste0("\t  - Results/09_Scatterplot_", prefix, ".pdf"))
-}
+suppressWarnings({
+        pcaPlot <- ggplot(data = pcaDf, aes(x = X, y = Y, color = Region, label = Sample)) +
+                geom_point(size = 2, shape = 20) +
+                scale_color_manual(values = regionCols) +
+                labs(
+                        x = paste0("PC1 (", round(summary(pcaRes)$importance[2, c(1)] * 100, 1), "%)"),
+                        y = paste0("PC2 (", round(summary(pcaRes)$importance[2, c(2)] * 100, 1), "%)")
+                ) +
+                theme_bw() +
+                theme(
+                        axis.line = element_line(colour = "black"),
+                        panel.grid.major = element_blank(),
+                        panel.grid.minor = element_blank(),
+                        panel.border = element_blank(),
+                        panel.background = element_blank(),
+                        axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),
+                        text = element_text(size = 12)
+                )
+})
+pdf(file.path(outDir, "09_PCA_perRegion.pdf"))
+print(pcaPlot)
+invisible(dev.off())
 
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
 message("Fin")

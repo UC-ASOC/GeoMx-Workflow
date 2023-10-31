@@ -15,6 +15,8 @@ RUN R -e 'BiocManager::install("GeomxTools")'
 RUN R -e 'BiocManager::install("GeoMxWorkflows")'
 
 # Install CRAN packages
+RUN R -e 'install.packages("stringr")'
+RUN R -e 'install.packages("yaml")'
 RUN R -e 'install.packages("dplyr")'
 RUN R -e 'install.packages("scales")'
 RUN R -e 'install.packages("ggplot2")'
