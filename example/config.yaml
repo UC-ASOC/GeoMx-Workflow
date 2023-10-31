@@ -47,7 +47,6 @@ Segment:
                 - cyan
                 - indianred2
                 - chartreuse1
-        Key: "Neuron <font color='#E93AFA'>&#9724;</font>, Iba1 <font color='#F7DA3C'>&#9724;</font>, GFAP <font color='#7AFAFD'>&#9724;</font>, Neuropil <font color='#DC6F67'>&#9724;</font>, Full <font color='#A1FB3F'>&#9724;</font>"
 QCparam:
         SegmentQC:
                 minSegmentReads: 1000 # Minimum number of reads (1000)
