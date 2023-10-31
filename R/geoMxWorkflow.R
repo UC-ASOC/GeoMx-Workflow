@@ -443,7 +443,7 @@ suppressWarnings({
                         legend.position = "none", 
                         text = element_text(size = 12)
                 ) + 
-                geom_hline(aes(yintercept = log10(2)), lty=2, col="grey50")
+                geom_hline(aes(yintercept = log10(loqMin)), lty=2, col="grey50")
 })
 
 suppressWarnings({
@@ -469,7 +469,7 @@ suppressWarnings({
                         legend.position = "none", 
                         text = element_text(size = 12)
                 ) + 
-                geom_hline(aes(yintercept = log10(2)), lty=2, col="grey50")
+                geom_hline(aes(yintercept = log10(loqMin)), lty=2, col="grey50")
 })
  
 pdf(file.path(outDir, "07_2_LOQ_Distribution.pdf"))
@@ -479,10 +479,10 @@ invisible(dev.off())
 message("\t  - Results/07_2_LOQ_Distribution.pdf")
 
 suppressWarnings({
-        scatterPlot2 <- ggplot(data=statDf, aes(x=Sample, y=log10(LOQ), group=Segment)) +
+        scatterPlot2 <- ggplot(data=statDf, aes(x = Sample, y = log10(LOQ), group = Segment)) +
                 geom_line(aes(color=Segment), lwd=0.5) +
                 geom_point(aes(color=Segment)) +
-                scale_color_brewer(palette="Dark2") + 
+                scale_color_manual(values = segmentCols) +
                 labs(
                         title = "",
                         x = "", 
@@ -498,7 +498,7 @@ suppressWarnings({
                         axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0.5),
                         text = element_text(size = 12)
                 ) + 
-                geom_hline(aes(yintercept = log10(2)), lty=2, col="grey50")
+                geom_hline(aes(yintercept = log10(loqMin)), lty=2, col="grey50")
 })
 
 pdf(file.path(outDir, "07_2_LOQ_perSample.pdf"), width=15)
@@ -792,6 +792,7 @@ print(pcaPlot)
 invisible(dev.off())
 
 message("\n##### ##### ##### ##### ##### ##### ##### ##### ##### #####")
+file.copy(getHistoryFile(), file.path(outDir, "00_Rhistory.R"))
 message("Fin")
 
 q("no")

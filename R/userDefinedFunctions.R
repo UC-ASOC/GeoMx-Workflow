@@ -106,4 +106,11 @@ panel.cor <- function(x, y, prefix = "", ...) {
         text(0.5, 0.5, paste("Pearson= ", pearson_coef, "\nP-value=", pearson_p, "\n\nSpearman= ", spearman_coef, "\nP-value=", spearman_p, sep=""), cex = 1.2, font = 6)
 }
 
+getHistoryFile <- function() {
+  c_args <- commandArgs()
+  r_file <- c_args[grepl("\\.R$", c_args, ignore.case = TRUE)]
+  r_file <- gsub("--file=", "", r_file)
+  r_file <- normalizePath(r_file)
+  return(r_file)
+}
 message("\nUser defined functions loaded.")
