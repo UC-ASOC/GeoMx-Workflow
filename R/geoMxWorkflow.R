@@ -1,7 +1,7 @@
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # Heewon Seo (Heewon.Seo@UCalgary.ca)
 # Written on Oct 02, 2023
-# Updated on Oct 30, 2023
+# Updated on Dec 06, 2023
 ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 # Directory settings
 setwd("/home/rstudio/R")
@@ -38,10 +38,10 @@ if (file.exists(paramFile)) {
         names(slideCols) <- slideOrder
         if (length(slideOrder) != config$Slide$Count) stop("Check YAML: Slide")
 
-        patientOrder <- config$Patient$Name
-        patientCols <- config$Patient$Color
-        names(patientCols) <- patientOrder
-        if (length(patientOrder) != config$Patient$Count) stop("Check YAML: Patient")
+        sampleOrder <- config$Sample$Name
+        sampleCols <- config$Sample$Color
+        names(sampleCols) <- sampleOrder
+        if (length(sampleOrder) != config$Sample$Count) stop("Check YAML: Sample")
 
         regionOrder <- config$Region$Name
         regionCols <- config$Region$Color
@@ -85,9 +85,6 @@ if (file.exists(paramFile)) {
         geneDetectionRateThre <- config$QCparam$DetectionRate$geneDetectionRateThre
         geneDetectionRateBins <- unlist(config$QCparam$DerectionRateBins$geneDetectionRate)
         geneDetectionRateBinLabels <- config$QCparam$DerectionRateBins$geneDetectionRateLabel
-
-        coefVariationThreshold <- config$VariableGenes$coefVariationThreshold
-        howManyFeatures <- config$VariableGenes$numberOfFeatures
 
 } else {
 	stop("Provide config.yaml file with -v option")
@@ -316,7 +313,7 @@ suppressWarnings({
                 geom_violin(position = dodge, size = 0) +
                 geom_boxplot(width = 0.1, position = dodge, fill="white") +
                 scale_fill_manual(values = segmentCols) +
-                facet_wrap( ~ Slide) +
+                facet_grid( ~ Slide) +
                 labs(
                         title = "",
                         x = "", 
@@ -341,7 +338,7 @@ suppressWarnings({
                 geom_violin(position = dodge, size = 0) +
                 geom_boxplot(width = 0.1, position = dodge, fill="white") +
                 scale_fill_manual(values = segmentCols) +
-                facet_wrap( ~ Slide) +
+                facet_grid( ~ Slide) +
                 labs(
                         title = "",
                         x = "", 
@@ -406,19 +403,20 @@ message("                 the quantifiable limit of gene expression per segment.
 statDf <- data.frame(
         Slide = pData(newSet)$Slide,
         Sample = pData(newSet)$Sample,
+        Library = protocolData(newSet)$AOI,
         Segment = pData(newSet)$Segment,
-        LOQ = loqDf[,1]
+        LOQ = loqDf[, 1]
 )
-statShort <- dcast(statDf, Sample~Segment,  fun.aggregate = length, value.var = "LOQ")
-perSample <- statShort[,c(2:ncol(statShort))]
-rownames(perSample) <- as.character(statShort[,1])
+statShort <- dcast(statDf, Sample ~ Segment, fun.aggregate = mean, value.var = "LOQ")
+perSample <- statShort[, c(2:ncol(statShort))]
+rownames(perSample) <- as.character(statShort[, 1])
 statShort <- data.frame(
         Sample = rownames(perSample),
-        LOQmean = as.matrix(apply(perSample, 1, mean, na.rm=TRUE))
+        LOQmean = as.matrix(apply(perSample, 1, mean, na.rm = TRUE))
 )
-statShort <- statShort[order(statShort$LOQmean),]
-statDf$Sample <- factor(statDf$Sample, levels=statShort$Sample)
-statDf$Segment <- factor(statDf$Segment, levels=segmentOrder)
+statShort <- statShort[order(statShort$LOQmean), ]
+statDf$Sample <- factor(statDf$Sample, levels = statShort$Sample)
+statDf$Segment <- factor(statDf$Segment, levels = segmentOrder)
 
 dodge <- position_dodge(width = 0.5)
 suppressWarnings({
@@ -495,7 +493,7 @@ suppressWarnings({
                         panel.grid.minor = element_blank(),
                         panel.border = element_blank(),
                         panel.background = element_blank(),
-                        axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0.5),
+                        axis.text.x = element_text(angle = 90, vjust = 0, hjust = 0),
                         text = element_text(size = 12)
                 ) + 
                 geom_hline(aes(yintercept = log10(loqMin)), lty=2, col="grey50")
@@ -616,9 +614,7 @@ geneDetectionRateDf <- data.frame(
 geneDetectionRateDf <- geneDetectionRateDf[order(geneDetectionRateDf$Number, geneDetectionRateDf$DetectionRate, geneDetectionRateDf$Gene),]
 write.table(geneDetectionRateDf, file.path(outDir, "07_4_Gene_detection_rate.txt"), row.names=F, col.names=T, quote=F, sep="\t")
 
-negativeProbefData <- subset(fData(newSet), CodeClass == "Negative")
-neg_probes <- unique(negativeProbefData$TargetName)
-finalSet <- newSet[fData(newSet)$DetectionRate >= geneDetectionRateThre | fData(newSet)$TargetName %in% neg_probes, ]
+finalSet <- newSet[fData(newSet)$DetectionRate >= geneDetectionRateThre, ]
 saveRDS(finalSet, file.path(outDir, "07_finalSet.GeoMx.RDS"))
 message("\n\t>> After filtering out low signal gene:")
 message(paste0("\t  - Genes  : ", dim(finalSet)[1]))
@@ -688,7 +684,7 @@ normDf$Segment <- rep(annot$Segment, each=nrow(rawMat))
 normDf$Segment <- factor(normDf$Segment, levels = segmentOrder)
 
 pdf(file.path(outDir, "08_Before_norm_perSegment.pdf"))
-suppressWarnings(boxplot(log10(Expression) ~ Segment, data = rawDf, col = segmentCols, pch = 20, ylab = "Expression, log10", xlab = "Raw count"))
+suppressWarnings(boxplot(log10(Expression) ~ Segment, data = rawDf, col = segmentCols, pch = 20, ylab = "Raw count, log10", xlab = "Segment"))
 invisible(dev.off())
 
 rawMat <- rawMat[, segmentIdx]
@@ -697,7 +693,7 @@ suppressWarnings(boxplot(log10(rawMat), col = segmentCols[annot$Segment[segmentI
 invisible(dev.off())
 
 pdf(file.path(outDir, "08_After_norm_perSegment.pdf"))
-suppressWarnings(boxplot(log10(Expression) ~ Segment, data = normDf, col = segmentCols, pch = 20, ylab = "", xlab = "Upper-quartile norm"))
+suppressWarnings(boxplot(log10(Expression) ~ Segment, data = normDf, col = segmentCols, pch = 20, ylab = "Upper-quartile norm, log10", xlab = "Segment"))
 invisible(dev.off())
 
 normMat <- normMat[, segmentIdx]

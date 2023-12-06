@@ -85,27 +85,6 @@ boxQC <- function(df = NULL,
         return(violin)
 }
 
-panel.reg <- function(x, y, col) abline(lm(y~x), col=col) 
-panel.lm =  function (x, y, col = par("col"), bg = NA, pch = par("pch"), 
-    cex = 1, col.smooth = "red", span = 2/3, iter = 3, ...)  {
-    points(x, y, pch = pch, col = col, bg = bg, cex = cex)
-    ok <- is.finite(x) & is.finite(y)
-    if (any(ok)) panel.reg(x[ok], y[ok], col.smooth)
-}
-panel.cor <- function(x, y, prefix = "", ...) {
-	usr <- par("usr"); on.exit(par(usr))
-	par(usr = c(0, 1, 0, 1))
-        pearson <- cor.test(x, y, method="pearson", use="complete.obs")
-        spearman <- cor.test(x, y, method="spearman", use="complete.obs")
-
-        pearson_coef <- format(round(pearson$estimate, 4), nsmall = 4)
-        pearson_p <- formatC(pearson$p.value, format="e", digits=2)
-        spearman_coef <- format(round(spearman$estimate, 4), nsmall = 4)
-        spearman_p <- formatC(spearman$p.value, format="e", digits=2)
-	
-        text(0.5, 0.5, paste("Pearson= ", pearson_coef, "\nP-value=", pearson_p, "\n\nSpearman= ", spearman_coef, "\nP-value=", spearman_p, sep=""), cex = 1.2, font = 6)
-}
-
 getHistoryFile <- function() {
   c_args <- commandArgs()
   r_file <- c_args[grepl("\\.R$", c_args, ignore.case = TRUE)]
