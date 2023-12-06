@@ -11,7 +11,7 @@ Slide: # Dark2
                 - "#D95F02"
                 - "#7570B3"
                 - "#E7298A"
-Patient: # Accent
+Sample: # Accent
         Count: 5
         Name:
                 - "74"
