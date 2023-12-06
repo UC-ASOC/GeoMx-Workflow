@@ -20,9 +20,9 @@ This is a Docker app built to compile a set of packages to run GeoMx Workflows [
   * To run the Workflow, **three** folders under the ```WORKING_DIRECTORY``` folder are required and the folder names are case-sensitive.
     1. **DCC** : All Digital Count Conversion files
     2. **PKC** : Probe Kit Configuration file
-    3. **Annot** : [Worksheet (and sample annotation) in Excel](./example/Annotation.xlsx) - manually compiled
+    3. **Annot** : [Worksheet (and sample annotation) in Excel](./.github/Annotation.xlsx) - manually compiled
   * A configuration file/parameters
-    * **config.yaml** : [Parameters to run geomx-workflow](./example/config.yaml)
+    * **config.yaml** : [Parameters to run geomx-workflow](./.github/config.yaml)
   
 ```
 WORKING_DIRECTORY
