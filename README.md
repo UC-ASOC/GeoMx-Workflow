@@ -48,6 +48,9 @@ $ docker run -it --rm -v WORKING_DIRECTORY:/home/rstudio/analysis -v YAML_DIR/co
 #### Results
   * Users can find the results, i.e., PDF, TXT, and RDS files, in the ```WORKING_DIRECTORY/Results``` folder.
 
+## Report
+  * [QC Report in HTML](https://htmlpreview.github.io/?https://github.com/lootpiz/GeoMx-Workflow/blob/main/.github/SOA_Brain_QCreport.html)
+
 ---
 ## Environment
 ```
