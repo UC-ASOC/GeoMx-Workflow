@@ -50,6 +50,7 @@ $ docker run -it --rm -v WORKING_DIRECTORY:/home/rstudio/analysis -v YAML_DIR/co
 
 ## Report
   * [QC Report in HTML](https://htmlpreview.github.io/?https://github.com/lootpiz/GeoMx-Workflow/blob/main/.github/SOA_Brain_QCreport.html)
+    * Note that Javascript disabled in HTML preview
 
 ---
 ## Environment
