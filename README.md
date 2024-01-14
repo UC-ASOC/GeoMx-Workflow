@@ -8,7 +8,6 @@ This is a Docker app built to compile a set of packages to run GeoMx Workflows [
 ## Features
   * **Run GeoMx Workflows handy using Docker**
   * **Generate QC reports with diagnostic plots**
-  * **Analyze and annotate GeoMx data to identify biological features in the dataset(s)**
   * **Improve research reproducibility and replicability**
 
 ## Run
