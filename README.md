@@ -11,7 +11,7 @@ This is a Docker app built to compile a set of packages to run GeoMx Workflows [
   * **Improve research reproducibility and replicability**
 
 ## Run
-  * Users can pull the GeoMx-Workflow image from [Docker Hub](https://hub.docker.com/r/lootpiz/geomx-workflow)
+  * Users can pull the GeoMx-Workflow image from [Docker Hub](https://hub.docker.com/r/ucasoc/geomx-workflow)
   * The following Brain GeoMx data was downloaded from [Spatial Organ Atlas](https://nanostring.com/products/geomx-digital-spatial-profiler/spatial-organ-atlas/)
   * The following NanoString Probe Kit Configuration (PKC) file was downloaded from [Nanostring](https://nanostring.com/products/geomx-digital-spatial-profiler/geomx-dsp-configuration-files/)
 
