@@ -41,7 +41,7 @@ WORKING_DIRECTORY
 
 #### Docker
 ```
-$ docker run -it --rm -v WORKING_DIRECTORY:/home/rstudio/analysis -v YAML_DIR/config.yaml:/home/rstudio/analysis/config.yaml lootpiz/geomx-workflow
+$ docker run -it --rm -v WORKING_DIRECTORY:/home/rstudio/analysis -v YAML_DIR/config.yaml:/home/rstudio/analysis/config.yaml ucasoc/geomx-workflow
 ```
 
 #### Results
